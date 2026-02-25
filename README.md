@@ -1,7 +1,7 @@
 # VisionPilot AI 🧠
 
 <p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Google_Gemini_logo.svg/320px-Google_Gemini_logo.svg.png" alt="Gemini Logo" width="80" />
+  <img src="images/gemini-color.png" alt="Gemini Logo" width="80" />
 </p>
 
 > **An AI that sees your screen, understands your intent, and acts like a human.**
