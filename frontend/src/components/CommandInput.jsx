@@ -1,9 +1,9 @@
 import { useState, useRef } from 'react';
-import { Send, Square, Mic } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
+import VoiceMicButton from './VoiceMicButton';
 
 export default function CommandInput({ onSend, onInterrupt, isLoading, agentState }) {
     const [value, setValue] = useState('');
-    const [isRecording, setIsRecording] = useState(false);
     const inputRef = useRef(null);
 
     const handleSend = () => {
@@ -20,7 +20,6 @@ export default function CommandInput({ onSend, onInterrupt, isLoading, agentStat
         }
     };
 
-    const toggleRecording = () => setIsRecording(prev => !prev);
     const isWorking = ['listening', 'thinking', 'working'].includes(agentState);
 
     return (
@@ -46,15 +45,14 @@ export default function CommandInput({ onSend, onInterrupt, isLoading, agentStat
             </div>
 
             {/* Voice button */}
-            <button
-                onClick={toggleRecording}
-                className={`w-11 h-11 flex items-center justify-center rounded-xl border transition-all duration-200 ${isRecording
-                        ? 'border-[#FFB347] bg-[#FFB347]/10 text-[#FFB347]'
-                        : 'border-[#1e1e2e] bg-[#111118] text-gray-400 hover:border-[#FFB347]/40 hover:text-[#FFB347]'
-                    }`}
-                title="Voice input (visual only)">
-                <Mic size={16} className={isRecording ? 'animate-pulse' : ''} />
-            </button>
+            <VoiceMicButton
+                inputRef={inputRef}
+                onResult={(text) => setValue(text)}
+                onAutoSend={(text) => {
+                    setValue(text);
+                    setTimeout(() => onSend(text), 100);
+                }}
+            />
 
             {/* Send button */}
             <button

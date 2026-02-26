@@ -7,7 +7,7 @@ Also sends periodic screenshots so the dashboard stays updated.
 import os
 import re
 import time
-import webbrowser
+import subprocess
 import pyautogui
 import httpx
 from dotenv import load_dotenv
@@ -67,34 +67,42 @@ def _extract_keys(text: str) -> list:
     return [mapping.get(p, p) for p in parts]
 
 
+# ─── Browser helpers ──────────────────────────────────────────────────────────
+
+def _open_url_and_focus(url: str):
+    """
+    Open a URL and bring the browser window to the foreground.
+    Uses Windows 'start' command which opens in the foreground by default.
+    """
+    print(f"    🌐 Opening: {url}")
+    # 'start' on Windows opens the URL in the default browser and brings it to front
+    subprocess.Popen(f'start "" "{url}"', shell=True)
+    # Give the browser time to open and render the page before any typing steps
+    time.sleep(4.0)
+
+
+
 # ─── Action Dispatcher ───────────────────────────────────────────────────────
 
 def execute_step(step: str):
     s = step.lower()
 
-    # ── Open browser / navigate to URL ───────────────────────────────────────
-    if any(x in s for x in ["open browser", "launch browser", "open chrome",
+    # ── Navigate to URL (primary action) ─────────────────────────────────────
+    if any(x in s for x in ["navigate to", "go to", "open url",
+                              "visit", "open youtube", "open google",
+                              "launch youtube", "open the website",
+                              "open browser", "launch browser", "open chrome",
                               "open firefox", "open edge", "open a browser",
                               "open the browser", "open a web browser",
                               "open the web browser"]):
-        # Just open the default browser
-        webbrowser.open("https://www.google.com")
-        time.sleep(2.0)
-
-    elif any(x in s for x in ["navigate to", "go to", "open url",
-                                "visit", "open youtube", "open google",
-                                "launch youtube", "open the website"]):
         url = _extract_url(step)
         if url:
-            print(f"    🌐 Opening: {url}")
-            webbrowser.open(url)
-            time.sleep(2.5)
+            _open_url_and_focus(url)
         else:
-            # No URL found — try address bar fallback
-            pyautogui.hotkey("ctrl", "l")
-            time.sleep(0.4)
-            pyautogui.hotkey("ctrl", "a")
-            time.sleep(0.1)
+            # Generic "open browser" with no URL → open new tab
+            print("    🌐 Opening browser (new tab)")
+            subprocess.Popen('start "" "https://www.google.com"', shell=True)
+            time.sleep(3.5)
 
     # ── Search / type ─────────────────────────────────────────────────────────
     elif any(x in s for x in ["search for", "search "]):
@@ -102,8 +110,7 @@ def execute_step(step: str):
         if text:
             # If YouTube is already open, use its search URL
             if "youtube" in s:
-                webbrowser.open(f"https://www.youtube.com/results?search_query={text.replace(' ', '+')}")
-                time.sleep(2.5)
+                _open_url_and_focus(f"https://www.youtube.com/results?search_query={text.replace(' ', '+')}")
             else:
                 pyautogui.typewrite(text, interval=0.05)
                 time.sleep(0.3)
@@ -127,10 +134,7 @@ def execute_step(step: str):
 
     # ── Click ─────────────────────────────────────────────────────────────────
     elif "click" in s:
-        # For search bar clicks, focus the address bar then tab to search
         if "search bar" in s or "search box" in s:
-            # YouTube/Google search bar — just click center of screen as fallback
-            # Better: wait for page and click via coords
             time.sleep(1.0)
             pyautogui.click()
         else:
