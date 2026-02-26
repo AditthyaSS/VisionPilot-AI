@@ -18,8 +18,21 @@ Built with **Gemini 2.5 Flash** · React + Vite · FastAPI · pyautogui
 | 🧠 | **Reasoning** — Gemini breaks your command into executable steps |
 | 🖱️ | **Action** — pyautogui executes mouse/keyboard actions |
 | 🔁 | **Interruption** — stop and redirect the agent mid-task |
+| 🎙️ | **Voice Input** — speak your command; it transcribes live and sends automatically |
+
 
 ---
+
+## 🎙️ Voice Input
+
+Click the **microphone button** next to the command input field to speak your command.
+Speech is transcribed live using the **Web Speech API** (built into Chrome/Edge — no extra setup needed).
+When you stop talking, the command is sent to the agent automatically.
+
+> **Note:** Voice input requires a Chromium-based browser (Chrome or Edge) and microphone permission.
+
+---
+
 
 ## 🏗️ Architecture
 
