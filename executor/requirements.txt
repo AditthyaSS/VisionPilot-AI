@@ -3,3 +3,4 @@ mss
 pillow
 httpx
 python-dotenv
+pyperclip

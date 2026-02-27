@@ -5,13 +5,23 @@ Also sends periodic screenshots so the dashboard stays updated.
 """
 
 import os
+import sys
 import re
 import time
 import subprocess
 import pyautogui
+import pyperclip
 import httpx
 from dotenv import load_dotenv
 from screen import capture_screenshot
+
+# Add parent path so executor can import from backend when run from its own dir
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+try:
+    from gemini_client import vision_find_element as _gemini_vision_find
+except ImportError:
+    _gemini_vision_find = None
+    print("⚠️  gemini_client not found — vision click disabled")
 
 load_dotenv()
 
@@ -75,11 +85,61 @@ def _open_url_and_focus(url: str):
     Uses Windows 'start' command which opens in the foreground by default.
     """
     print(f"    🌐 Opening: {url}")
-    # 'start' on Windows opens the URL in the default browser and brings it to front
     subprocess.Popen(f'start "" "{url}"', shell=True)
-    # Give the browser time to open and render the page before any typing steps
     time.sleep(4.0)
 
+
+def _vision_click(element_description: str, wait_before: float = 2.0) -> bool:
+    """
+    Universal vision-based click:
+    1. Takes a screenshot of the current screen
+    2. Asks Gemini Vision where the described element is (returns x,y at 1280x720 scale)
+    3. Scales coordinates to the real screen resolution
+    4. Clicks at that position
+    Works for any website, app, or UI — not just YouTube.
+    Returns True if clicked, False if element not found.
+    """
+    if _gemini_vision_find is None:
+        print("    ⚠️  Vision click unavailable — gemini_client not loaded")
+        return False
+
+    print(f"    👁️  Looking for: '{element_description}'...")
+    time.sleep(wait_before)  # let the page/app settle before screenshotting
+
+    screenshot_b64 = capture_screenshot()
+    result = _gemini_vision_find(screenshot_b64, element_description)
+
+    if result is None:
+        print(f"    ⚠️  Element not found by vision: '{element_description}'")
+        return False
+
+    # The screenshot was taken at 1280x720 but the real screen may be larger.
+    # Scale the coordinates back to actual screen resolution.
+    screen_w, screen_h = pyautogui.size()
+    scale_x = screen_w / 1280
+    scale_y = screen_h / 720
+    real_x = int(result[0] * scale_x)
+    real_y = int(result[1] * scale_y)
+
+    print(f"    🖱️  Clicking at screen ({real_x}, {real_y})")
+    pyautogui.moveTo(real_x, real_y, duration=0.3)
+    pyautogui.click(real_x, real_y)
+    time.sleep(0.5)
+    return True
+
+
+
+# ─── Typing helper ───────────────────────────────────────────────────────────
+
+def _type_text(text: str):
+    """
+    Type text reliably on Windows by copying to clipboard and pasting.
+    pyautogui.typewrite() silently drops many characters (unicode, punctuation).
+    """
+    pyperclip.copy(text)
+    time.sleep(0.2)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.2)
 
 
 # ─── Action Dispatcher ───────────────────────────────────────────────────────
@@ -87,8 +147,33 @@ def _open_url_and_focus(url: str):
 def execute_step(step: str):
     s = step.lower()
 
+    # ── Play / open-and-play (vision-based, works on any site) ───────────────
+    # Checked BEFORE the generic "open" branch so "open and play X" is caught here.
+    if any(x in s for x in ["play", "open and play", "start playing"]):
+        # Extract the thing to play
+        query = _extract_text(step)
+        if not query:
+            query = re.sub(
+                r"^(?:open and play|start playing|play the first video|play videos? (?:about|of|on)?|play)\s*",
+                "", s, flags=re.IGNORECASE,
+            ).strip()
+            query = re.sub(r"\s*(?:on youtube|on google|in browser|on the internet)\s*$", "", query, flags=re.IGNORECASE).strip()
+
+        if query and query not in ("the first video", "first video", "a video", ""):
+            # Navigate to YouTube search results for the query
+            search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+            _open_url_and_focus(search_url)
+
+        # Now use vision to click the first video — works on YouTube, Spotify, Netflix, etc.
+        clicked = _vision_click("first video thumbnail or first playable result", wait_before=2.5)
+        if not clicked:
+            # Fallback: click center of page area below the nav bar
+            print("    ⚠️  Vision click failed — using center-screen fallback")
+            screen_w, screen_h = pyautogui.size()
+            pyautogui.click(screen_w // 2, int(screen_h * 0.4))
+
     # ── Navigate to URL (primary action) ─────────────────────────────────────
-    if any(x in s for x in ["navigate to", "go to", "open url",
+    elif any(x in s for x in ["navigate to", "go to", "open url",
                               "visit", "open youtube", "open google",
                               "launch youtube", "open the website",
                               "open browser", "launch browser", "open chrome",
@@ -105,21 +190,31 @@ def execute_step(step: str):
             time.sleep(3.5)
 
     # ── Search / type ─────────────────────────────────────────────────────────
-    elif any(x in s for x in ["search for", "search "]):
+    elif any(x in s for x in ["search for", "search on", "search "]):
         text = _extract_text(step)
         if text:
-            # If YouTube is already open, use its search URL
+            # If YouTube is mentioned, navigate directly via search URL
             if "youtube" in s:
                 _open_url_and_focus(f"https://www.youtube.com/results?search_query={text.replace(' ', '+')}")
+            # If Google is mentioned, navigate directly via search URL
+            elif "google" in s:
+                _open_url_and_focus(f"https://www.google.com/search?q={text.replace(' ', '+')}")
             else:
-                pyautogui.typewrite(text, interval=0.05)
+                # Click to focus the active browser input, then type + Enter
+                time.sleep(1.0)
+                pyautogui.click()
+                time.sleep(0.4)
+                _type_text(text)
                 time.sleep(0.3)
                 pyautogui.press("enter")
 
     elif any(x in s for x in ["type", "enter text", "write", "input"]):
         text = _extract_text(step)
         if text:
-            pyautogui.typewrite(text, interval=0.05)
+            time.sleep(0.5)
+            pyautogui.click()
+            time.sleep(0.3)
+            _type_text(text)
 
     # ── Keyboard ──────────────────────────────────────────────────────────────
     elif "press enter" in s or "hit enter" in s:
@@ -132,12 +227,16 @@ def execute_step(step: str):
         elif len(keys) == 1:
             pyautogui.press(keys[0])
 
-    # ── Click ─────────────────────────────────────────────────────────────────
+    # ── Click (vision-based — works for any element on any app/site) ─────────
     elif "click" in s:
-        if "search bar" in s or "search box" in s:
-            time.sleep(1.0)
-            pyautogui.click()
-        else:
+        # Extract what to click from the step description
+        element = re.sub(r"^(?:click on |click the |click )", "", s, flags=re.IGNORECASE).strip()
+        element = element or "primary interactive element"
+        time.sleep(0.5)
+        clicked = _vision_click(element, wait_before=1.0)
+        if not clicked:
+            # Fallback: click at center of screen
+            print("    ⚠️  Vision click failed — clicking center of screen")
             pyautogui.click()
 
     # ── Scroll ────────────────────────────────────────────────────────────────
