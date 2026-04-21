@@ -15,7 +15,7 @@ Built with **Gemini 2.5 Flash** · React + Vite · FastAPI · pyautogui
 | | Feature |
 |---|---|
 |  | **Vision** — captures and analyzes your screen |
-| 🧠 | **Reasoning** — Gemini breaks your command into executable steps |
+|  | **Reasoning** — Gemini breaks your command into executable steps |
 | 🖱️ | **Action** — pyautogui executes mouse/keyboard actions |
 | 🔁 | **Interruption** — stop and redirect the agent mid-task |
 | 🎙️ | **Voice Input** — speak your command; it transcribes live and sends automatically |
